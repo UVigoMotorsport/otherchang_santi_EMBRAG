@@ -19,13 +19,19 @@
 
 #define midpoint 90
 #define midpointms 1450
-#define halfup 65
-#define downchange 180
-#define upchange 0
+//#define halfup 65
+#define halfup 1330
+//#define downchange 180
+#define downchange 2100
+//#define upchange 0
+#define upchange 900
 #define movetime 500
 
-#define clutched 0
-#define declutched 100
+//#define clutched 0
+//#define declutched 100
+
+#define clutched 900
+#define declutched 2100
 
 Servo gearchg;
 Servo clutch;
@@ -48,6 +54,7 @@ int RELEASE = 0;
 
 void setup()
 {
+  Serial.begin(9600);
   pinMode(GEARCHANGE, OUTPUT);
   pinMode(CLUTCH, OUTPUT);
   pinMode(UPCHANGE, INPUT);
@@ -120,6 +127,8 @@ void loop()
     }
     else if (millis() - laststart > 25)
     {
+      float clutchpos = declutched;
+      float clutchinc = ((float) clutched - (float) declutched) / 40.0;
       clutch.write(declutched);
       delay(100);
       gearchg.attach(GEARCHANGE);
@@ -127,24 +136,33 @@ void loop()
       delay(DELAY);
       gearchg.writeMicroseconds(midpointms);
       delay(150);
-      clutch.write(90);
-      delay(2);
-      clutch.write(80);
-      delay(2);
-      clutch.write(70);
-      delay(2);
-      clutch.write(60);
-      delay(2);
-      clutch.write(50);
-      delay(2);
-      clutch.write(40);
-      delay(2);
-      clutch.write(30);
-      delay(2);
-      clutch.write(20);
-      delay(2);
-      clutch.write(10);
-      delay(2);
+      int startdelay = 10;
+      int incdelay = 1;
+      while (clutchpos > 0)
+      {
+        clutchpos += clutchinc;
+        if (clutchinc < 0)
+        {
+          if (clutchpos <= clutched)
+          {
+            break;
+          }
+        }
+        else if (clutchinc > 0)
+        {
+          if (clutchpos >= clutched)
+          {
+            break;
+          }
+        }
+        else
+        {
+          break;
+        }
+        clutch.write((int) clutchpos);
+        delay(startdelay);
+        startdelay += incdelay;
+      }
       clutch.write(clutched);
       delay(10);
       gear--;
@@ -189,4 +207,3 @@ void loop()
     delay(10);
   }
 }
-

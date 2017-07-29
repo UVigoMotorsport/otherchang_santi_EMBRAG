@@ -14,6 +14,8 @@
 #define NEUTRAL 5
 #define ECUCUT 13
 
+#define TESTOUT 11
+
 #define POT_MAX 1023
 #define POT_MIN 0
 
@@ -28,17 +30,25 @@ int cutup = 0;
 
 #define midpoint 90
 #define midpointms 1450
-#define halfup 65
-#define downchange 180
-#define upchange 0
+//#define halfup 65
+#define halfup 1330
+//#define downchange 180
+#define downchange 2100
+//#define upchange 0
+#define upchange 900
 #define movetime 500
 
-#define clutched 0
-#define declutched 100
+//#define clutched 0
+//#define declutched 100
 
-#define MINPRESS 15
+#define clutched 900
+#define declutched 2100
 
-#define CLUTCHDELAY 3
+#define MINPRESS 25
+#define CLUTCHSTEPS 30
+#define CLUTCHINITDELAY 9
+#define CLUTCHINCDELAY 3
+#define CLUTCHFULLTIME 200
 
 Servo gearchg;
 Servo clutch;
@@ -51,26 +61,23 @@ int gear = 0;
 
 int MODE = ERRORMODE;
 
-unsigned long lastmove = 0;
-int currmove = 0;
-
-int change = 0;
-int changeinprogress = 0;
-unsigned long lastshow = 0;
-int nowclutched = 0;
+unsigned long statestart = 0;
 unsigned long lastmode = 0;
-int modestarted = 0;
-unsigned long changestart = 0;
+unsigned long clutchtime = 0;
 unsigned long laststart = 0;
-int started = 0;
+unsigned long clutchwait = 0;
+unsigned long lastshow = 0;
+int modestarted = 0;
 int forcedeclutched = 0;
-
-float nowclutchpos = 0;
-
-int RELEASE = 0;
+int change = 0;
+int started = 0;
 
 int CHANGESTATE = 0;
 
+float clutchpos = declutched;
+float clutchinc = ((float) clutched - (float) declutched) / (float) CLUTCHSTEPS;
+
+int RELEASE = 0;
 void setup()
 {
   pinMode(GEARCHANGE, OUTPUT);
@@ -79,17 +86,24 @@ void setup()
   pinMode(DOWNCHANGE, INPUT);
   pinMode(NEUTBUT, INPUT);
   pinMode(CLUTCHBUT, INPUT);
+  pinMode(ECUCUT, OUTPUT);
+  pinMode(TESTOUT, OUTPUT);
+
 
   gearchg.attach(GEARCHANGE);
   clutch.attach(CLUTCH);
   gearchg.writeMicroseconds(midpointms);
   clutch.write(clutched);
+  digitalWrite(ECUCUT, 0);
+  digitalWrite(TESTOUT, 0);
+  Serial.begin(9600);
 }
 
 void loop()
 {
   if (MODE == ERRORMODE)
   {
+    digitalWrite(LED_BUILTIN, 0);
     if (digitalRead(NEUTRAL) == 0)
     {
       if (!modestarted)
@@ -99,6 +113,7 @@ void loop()
       }
       if (millis() - lastmode > MINPRESS)
       {
+        digitalWrite(LED_BUILTIN, 1);
         MODE = NORMALMODE;
         gear = 0;
       }
@@ -109,304 +124,296 @@ void loop()
     }
   }
 
-  if (digitalRead(CLUTCHBUT) == 0)
+  if (MODE == NORMALMODE)
   {
-    clutch.write(declutched);
-    forcedeclutched = 1;
-  }
-  else if (analogRead(CLUTCHPOT) > 1000)
-  {
-    clutch.write(declutched);
-  }
-  else if (analogRead(CLUTCHPOT) > 102  && !forcedeclutched)
-  {
-    clutch.write((float) clutched + (((float) declutched - (float)  clutched) * (( (float) analogRead(CLUTCHPOT) - (float) POT_MIN) / ((float) POT_MAX - (float) POT_MIN))));
-  }
-  else
-  {
-    clutch.write(clutched);
-    forcedeclutched = 0;
+    if (gear != 0 && digitalRead(NEUTRAL) == 0)
+    {
+      MODE = ERRORMODE;
+    }
   }
 
-  if (!changeinprogress)
+  if (CHANGESTATE == 0)
   {
+
+    if (digitalRead(CLUTCHBUT) == 0)
+    {
+      clutch.write(declutched);
+      if (CHANGESTATE == 0)
+      {
+        forcedeclutched = 1;
+      }
+    }
+    else if (analogRead(CLUTCHPOT) > 1000)
+    {
+      clutch.write(declutched);
+    }
+    else if (analogRead(CLUTCHPOT) > 102  && !forcedeclutched)
+    {
+      clutch.write((float) clutched + (((float) declutched - (float)  clutched) * (( (float) analogRead(CLUTCHPOT) - (float) POT_MIN) / ((float) POT_MAX - (float) POT_MIN))));
+    }
+    else
+    {
+      clutch.write(clutched);
+      forcedeclutched = 0;
+    }
+
     if ((digitalRead(UPCHANGE) == 0) && (RELEASE == 0))
     {
       if (started == 0)
       {
         laststart = millis();
-        started = UP;
+        started = 1;
       }
-      else if (started != UP)
+      else if (millis() - laststart > MINPRESS)
       {
         started = 0;
+        change = UP;
+        RELEASE = 1;
       }
     }
-    if ((digitalRead(DOWNCHANGE) == 0) && (RELEASE == 0))
+    else if ((digitalRead(DOWNCHANGE) == 0) && (RELEASE == 0))
     {
       if (started == 0)
       {
         laststart = millis();
-        started = DOWN;
+        started = 1;
       }
-      else if (started != DOWN)
+      else if (millis() - laststart > MINPRESS)
       {
         started = 0;
+        change = DOWN;
+        RELEASE = 1;
       }
     }
-    if ((digitalRead(NEUTBUT) == 0) && (RELEASE == 0))
+    else if ((digitalRead(NEUTBUT) == 0) && (RELEASE == 0))
     {
       if (started == 0)
       {
         laststart = millis();
-        started = NEUT;
+        started = 1;
       }
-      else if (started != NEUT)
+      else if (millis() - laststart > MINPRESS)
       {
         started = 0;
+        change = NEUT;
+        RELEASE = 1;
       }
-    }
-    if ((digitalRead(DOWNCHANGE)) == 1 && (digitalRead(UPCHANGE) == 1) && (digitalRead(NEUTBUT) == 1))
-    {
-      if (millis() - laststart < MINPRESS)
-      {
-        started = 0;
-      }
-      RELEASE = 0;
-    }
-
-    if (started && (millis() - laststart > MINPRESS))
-    {
-      changeinprogress = 1;
-      changestart = millis();
     }
   }
-
-  cutup = 0;
-  if (changeinprogress)
+  if ((digitalRead(DOWNCHANGE)) == 1 && (digitalRead(UPCHANGE) == 1) && (digitalRead(NEUTBUT) == 1))
   {
-    int stat = 1;
-    if (MODE == ERRORMODE)
+    RELEASE = 0;
+    started = 0;
+  }
+  if (change != 0 && CHANGESTATE == 0)
+  {
+    if (MODE == NORMALMODE)
     {
-      stat = gearchange(started);
-      if (stat == 0)
+      if (gear <= 1 && change == DOWN)
       {
-        changeinprogress = 0;
-        started = 0;
+        change = 0;
       }
-    }
-    else if (MODE == NORMALMODE)
-    {
-      if (gear == 0)
+      else if (gear == 6 && change == UP)
       {
-        if (started == UP)
+        change = 0;
+      }
+      else if (gear != 1 && change == NEUT)
+      {
+        change = 0;
+      }
+      else
+      {
+        if (CUTUP && change == UP)
         {
-          stat = gearchange(DOWN);
-          if (stat == 0)
-          {
-            changeinprogress = 0;
-            if (digitalRead(NEUTRAL) == 1)
-            {
-              gear++;
-            }
-            else
-            {
-              MODE = ERRORMODE;
-            }
-          }
+          cutup = 1;
         }
         else
         {
-          changeinprogress = 0;
+          cutup = 0;
         }
+        CHANGESTATE++;
+        statestart = millis();
       }
-      else if (gear == 1)
-      {
-        if (started == UP)
-        {
-          if (CUTUP)
-          {
-            cutup = 1;
-          }
-          stat = gearchange(UP);
-          if (stat == 0)
-          {
-            changeinprogress = 0;
-            if (digitalRead(NEUTRAL) == 1)
-            {
-              gear++;
-            }
-            else
-            {
-              MODE = ERRORMODE;
-            }
-          }
-        }
-        else if (started == NEUT)
-        {
-          stat = gearchange(NEUT);
-          if (stat == 0)
-          {
-            changeinprogress = 0;
-            if (digitalRead(NEUTRAL) == 0)
-            {
-              gear--;
-            }
-            else
-            {
-              MODE = ERRORMODE;
-            }
-          }
-        }
-        else
-        {
-          changeinprogress = 0;
-        }
-      }
-      else if (gear > 1)
-      {
-        if (started == UP || started == DOWN)
-        {
-          if (CUTUP && started == UP)
-          {
-            cutup = 1;
-          }
-          stat = gearchange(started);
-          if (stat == 0)
-          {
-            changeinprogress = 0;
-            if (digitalRead(NEUTRAL) == 1)
-            {
-              if (started == UP)
-              {
-                gear++;
-              }
-              else if (started == DOWN)
-              {
-                gear--;
-              }
-            }
-            else
-            {
-              MODE = ERRORMODE;
-            }
-          }
-        }
-        else
-        {
-          changeinprogress = 0;
-        }
-      }
-    }
-  }
-}
-
-int gearchange(int dir)
-{
-  if (CHANGESTATE == 0)
-  {
-    if (cutup)
-    {
-      digitalWrite(ECUCUT, 1);
-      CHANGESTATE++;
-      changestart = millis();
-      return -1;
-    }
-    clutch.write(declutched);
-    if (millis() - changestart > 100 || forcedeclutched)
-    {
-      CHANGESTATE++;
-      changestart = millis();
-    }
-    return -1;
-  }
-  else if (CHANGESTATE == 1)
-  {
-    int dirchange = midpointms;
-    if (dir == UP)
-    {
-      dirchange = upchange;
-    }
-    else if (dir == DOWN)
-    {
-      dirchange = downchange;
-    }
-    else if (dir == NEUT)
-    {
-      dirchange = halfup;
-    }
-    gearchg.write(dirchange);
-    int delaychange = DELAY;
-    if(cutup)
-    {
-      delaychange = CUTUPDELAY;
-    }
-    if (millis() - changestart > delaychange)
-    {
-      digitalWrite(ECUCUT, 0);
-      CHANGESTATE++;
-      changestart = millis();
-    }
-    return -1;
-  }
-  else if (CHANGESTATE == 2)
-  {
-    gearchg.writeMicroseconds(midpointms);
-    if (millis() - changestart > 150)
-    {
-      CHANGESTATE++;
-      changestart = millis();
-      nowclutchpos = declutched;
-    }
-    return -1;
-  }
-  else if (CHANGESTATE == 3)
-  {
-    if (forcedeclutched || cutup)
-    {
-      CHANGESTATE++;
-      changestart = millis();
     }
     else
     {
-      if (dir == DOWN)
+      CHANGESTATE++;
+      statestart = millis();
+    }
+  }
+
+  if (CHANGESTATE == 1)
+  {
+    if (!forcedeclutched && !cutup)
+    {
+      clutch.write(declutched);
+      if (millis() - statestart > CLUTCHFULLTIME)
       {
-        float clutchinc = ((float) clutched - (float) declutched) / 10.0;
-        clutch.write((int) nowclutchpos);
-        if (millis() - changestart > CLUTCHDELAY)
+        CHANGESTATE++;
+        statestart = millis();
+      }
+    }
+    else
+    {
+      if (cutup)
+      {
+        digitalWrite(ECUCUT, 1);
+      }
+      CHANGESTATE++;
+      statestart = millis();
+    }
+  }
+
+  if (CHANGESTATE == 2)
+  {
+    if (gear == 0 && change == UP && MODE == NORMALMODE)
+    {
+      gearchg.write(downchange);
+    }
+    else
+    {
+      if (change == UP)
+      {
+        gearchg.write(upchange);
+      }
+      else if (change == DOWN)
+      {
+        gearchg.write(downchange);
+      }
+      else if (change == NEUT)
+      {
+        gearchg.write(halfup);
+      }
+      else
+      {
+        change = 0;
+        CHANGESTATE = 0;
+      }
+    }
+
+    if (millis() - statestart > DELAY)
+    {
+      CHANGESTATE++;
+      statestart = millis();
+    }
+  }
+
+  if (CHANGESTATE == 3)
+  {
+    gearchg.write(midpointms);
+    if (millis() - statestart > 200)
+    {
+      CHANGESTATE++;
+      statestart = millis();
+    }
+  }
+
+  if (CHANGESTATE == 4)
+  {
+    if (MODE == NORMALMODE)
+    {
+      if ((gear == 0 && change == UP) || (gear == 1 && change == UP) || (gear == 2 && change == DOWN))
+      {
+        digitalWrite(TESTOUT, 1);
+        if (digitalRead(NEUTRAL) == 0)
         {
-          changestart = millis();
-          nowclutchpos += clutchinc;
-          return -1;
+          MODE = ERRORMODE;
         }
-        if (abs(nowclutchpos - (float) clutched) < clutchinc)
+      }
+      else if (gear == 1 && change == NEUT)
+      {
+        digitalWrite(TESTOUT, 0);
+        if (digitalRead(NEUTRAL) == 1)
         {
-          nowclutchpos = clutched;
+          MODE = ERRORMODE;
+        }
+      }
+    }
+    clutchpos = declutched;
+    clutchtime = millis();
+    clutchwait = CLUTCHINITDELAY;
+    CHANGESTATE++;
+    statestart = millis();
+  }
+
+  if (CHANGESTATE == 5)
+  {
+    if (cutup || forcedeclutched)
+    {
+      digitalWrite(ECUCUT, 0);
+    }
+    else
+    {
+      if (change == DOWN)
+      {
+        if (millis() - clutchtime > clutchwait)
+        {
+          clutch.write((int) clutchpos);
+          clutchpos += clutchinc;
+          clutchwait += CLUTCHINCDELAY;
+          clutchtime = millis();
+        }
+        if (clutchinc < 0)
+        {
+          if (clutchpos <= clutched)
+          {
+            clutch.write(clutched);
+            CHANGESTATE++;
+            statestart = millis();
+          }
+        }
+        else if (clutchinc > 0)
+        {
+          if (clutchpos >= clutched)
+          {
+            clutch.write(clutched);
+            CHANGESTATE++;
+            statestart = millis();
+          }
+        }
+        else
+        {
           clutch.write(clutched);
           CHANGESTATE++;
-          changestart = millis();
-          return -1;
+          statestart = millis();
         }
       }
       else
       {
         clutch.write(clutched);
-        if (millis() - changestart > 100)
+        if (millis() - statestart > CLUTCHFULLTIME)
         {
           CHANGESTATE++;
-          changestart = millis();
+          statestart = millis();
         }
       }
     }
-    return -1;
   }
-  if (CHANGESTATE == 4)
+
+  if (CHANGESTATE == 6)
   {
-    gearchg.writeMicroseconds((int)midpointms);
-    if (!forcedeclutched || !cutup)
+    if (MODE == NORMALMODE)
     {
-      clutch.write(clutched);
+      if (change == UP)
+      {
+        gear++;
+      }
+      else if (change == DOWN)
+      {
+        gear--;
+      }
+      else if (change == NEUT)
+      {
+        gear = 0;
+      }
     }
-    return 0;
+    CHANGESTATE = 0;
+    change = 0;
+  }
+
+  if (millis() - lastshow > 600)
+  {
+    Serial.println(gears[gear]);
+    lastshow = millis();
   }
 }

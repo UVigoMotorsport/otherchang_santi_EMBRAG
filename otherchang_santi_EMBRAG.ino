@@ -12,6 +12,7 @@
 #define CLUTCHBUT 4
 #define NEUTBUT A3
 #define NEUTRAL 5
+#define ECUCUT 13
 
 #define POT_MAX 1023
 #define POT_MIN 0
@@ -306,6 +307,7 @@ int gearchange(int dir)
   {
     if (cutup)
     {
+      digitalWrite(ECUCUT, 1);
       CHANGESTATE++;
       changestart = millis();
       return -1;
@@ -341,6 +343,7 @@ int gearchange(int dir)
     }
     if (millis() - changestart > delaychange)
     {
+      digitalWrite(ECUCUT, 0);
       CHANGESTATE++;
       changestart = millis();
     }

@@ -14,8 +14,6 @@
 #define NEUTRAL 5
 #define ECUCUT 13
 
-#define TESTOUT 11
-
 #define POT_MAX 1023
 #define POT_MIN 0
 
@@ -87,7 +85,6 @@ void setup()
   pinMode(NEUTBUT, INPUT);
   pinMode(CLUTCHBUT, INPUT);
   pinMode(ECUCUT, OUTPUT);
-  pinMode(TESTOUT, OUTPUT);
 
 
   gearchg.attach(GEARCHANGE);
@@ -95,7 +92,6 @@ void setup()
   gearchg.writeMicroseconds(midpointms);
   clutch.write(clutched);
   digitalWrite(ECUCUT, 0);
-  digitalWrite(TESTOUT, 0);
   Serial.begin(9600);
 }
 
@@ -275,10 +271,26 @@ void loop()
       if (change == UP)
       {
         gearchg.write(upchange);
+        if (MODE == ERRORMODE)
+        {
+          if (digitalRead(NEUTRAL) == 0)
+          {
+            MODE = NORMALMODE;
+            gear = 1;
+          }
+        }
       }
       else if (change == DOWN)
       {
         gearchg.write(downchange);
+        if (MODE == ERRORMODE)
+        {
+          if (digitalRead(NEUTRAL) == 0)
+          {
+            MODE = NORMALMODE;
+            gear = 2;
+          }
+        }
       }
       else if (change == NEUT)
       {
@@ -314,7 +326,6 @@ void loop()
     {
       if ((gear == 0 && change == UP) || (gear == 1 && change == UP) || (gear == 2 && change == DOWN))
       {
-        digitalWrite(TESTOUT, 1);
         if (digitalRead(NEUTRAL) == 0)
         {
           MODE = ERRORMODE;
@@ -322,7 +333,6 @@ void loop()
       }
       else if (gear == 1 && change == NEUT)
       {
-        digitalWrite(TESTOUT, 0);
         if (digitalRead(NEUTRAL) == 1)
         {
           MODE = ERRORMODE;

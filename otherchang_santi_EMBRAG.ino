@@ -14,6 +14,8 @@
 #define NEUTRAL 5
 #define ECUCUT 13
 
+#define TESTOUT 11
+
 #define POT_MAX 1023
 #define POT_MIN 0
 
@@ -28,31 +30,46 @@ int cutup = 0;
 
 #define midpoint 90
 #define midpointms 1450
+#define midpointpos 0
 //#define halfup 65
 #define halfup 1330
+#define halfuppos 0
 //#define downchange 180
 #define downchange 2100
+#define downchangepos 0
 //#define upchange 0
 #define upchange 900
-#define movetime 500
+#define upchangepos 0
 
 //#define clutched 0
-//#define declutched 100
-
 #define clutched 900
+#define clutchedpos 0
+//#define declutched 100
 #define declutched 2100
+#define declutchedpos 0
 
 #define MINPRESS 25
-#define CLUTCHSTEPS 30
-#define CLUTCHINITDELAY 9
-#define CLUTCHINCDELAY 3
+#define CLUTCHSTEPS 40
+#define CLUTCHINITDELAY 5
+#define CLUTCHINCDELAY 1
 #define CLUTCHFULLTIME 200
+
+#define POTFLUFF 2
+
+#define TIMED 1
+#define POTS 2
+int SERVOMODE = TIMED;
+
 
 Servo gearchg;
 Servo clutch;
 
+#define MAXLEVERTIME 700
+
 #define ERRORMODE 1
 #define NORMALMODE 2
+
+#define CONTINUE 0
 
 char gears[7] = {'N', '1', '2', '3', '4', '5', '6'};
 int gear = 0;
@@ -69,6 +86,7 @@ int modestarted = 0;
 int forcedeclutched = 0;
 int change = 0;
 int started = 0;
+int realgeardir = 0;
 
 int CHANGESTATE = 0;
 
@@ -85,13 +103,14 @@ void setup()
   pinMode(NEUTBUT, INPUT);
   pinMode(CLUTCHBUT, INPUT);
   pinMode(ECUCUT, OUTPUT);
-
+  pinMode(TESTOUT, OUTPUT);
 
   gearchg.attach(GEARCHANGE);
   clutch.attach(CLUTCH);
   gearchg.writeMicroseconds(midpointms);
   clutch.write(clutched);
   digitalWrite(ECUCUT, 0);
+  digitalWrite(TESTOUT, 0);
   Serial.begin(9600);
 }
 
@@ -100,6 +119,14 @@ void loop()
   if (MODE == ERRORMODE)
   {
     digitalWrite(LED_BUILTIN, 0);
+  }
+  else if (MODE == NORMALMODE)
+  {
+    digitalWrite(LED_BUILTIN, 1);
+  }
+
+  if (MODE == ERRORMODE)
+  {
     if (digitalRead(NEUTRAL) == 0)
     {
       if (!modestarted)
@@ -109,7 +136,6 @@ void loop()
       }
       if (millis() - lastmode > MINPRESS)
       {
-        digitalWrite(LED_BUILTIN, 1);
         MODE = NORMALMODE;
         gear = 0;
       }
@@ -130,7 +156,7 @@ void loop()
 
   if (CHANGESTATE == 0)
   {
-
+    gearchg.write(midpointms);
     if (digitalRead(CLUTCHBUT) == 0)
     {
       clutch.write(declutched);
@@ -243,7 +269,45 @@ void loop()
     if (!forcedeclutched && !cutup)
     {
       clutch.write(declutched);
-      if (millis() - statestart > CLUTCHFULLTIME)
+      if (SERVOMODE == POTS)
+      {
+        int clutchpotpos = analogRead(CLUTCHPOS);
+
+        if (millis() - statestart > MAXLEVERTIME)
+        {
+          MODE = ERRORMODE;
+          if (CONTINUE)
+          {
+            CHANGESTATE++;
+          }
+          else
+          {
+            CHANGESTATE = 0;
+            change = 0;
+          }
+          statestart = millis();
+        }
+        else
+        {
+          if (declutchedpos > clutchedpos)
+          {
+            if (clutchpotpos >= (declutchedpos - POTFLUFF))
+            {
+              CHANGESTATE++;
+              statestart = millis();
+            }
+          }
+          else if (declutchedpos < clutchedpos)
+          {
+            if (clutchpotpos <= (declutchedpos + POTFLUFF))
+            {
+              CHANGESTATE++;
+              statestart = millis();
+            }
+          }
+        }
+      }
+      else if (millis() - statestart > CLUTCHFULLTIME)
       {
         CHANGESTATE++;
         statestart = millis();
@@ -265,36 +329,45 @@ void loop()
     if (gear == 0 && change == UP && MODE == NORMALMODE)
     {
       gearchg.write(downchange);
+      realgeardir = DOWN;
     }
     else
     {
       if (change == UP)
       {
         gearchg.write(upchange);
+        realgeardir = UP;
         if (MODE == ERRORMODE)
         {
+          digitalWrite(TESTOUT, 0);
           if (digitalRead(NEUTRAL) == 0)
           {
             MODE = NORMALMODE;
             gear = 1;
           }
+          digitalWrite(TESTOUT, 1);
         }
       }
       else if (change == DOWN)
       {
         gearchg.write(downchange);
+        realgeardir = DOWN;
         if (MODE == ERRORMODE)
         {
+          digitalWrite(TESTOUT, 0);
           if (digitalRead(NEUTRAL) == 0)
           {
             MODE = NORMALMODE;
             gear = 2;
           }
+          digitalWrite(TESTOUT, 1);
         }
       }
       else if (change == NEUT)
       {
         gearchg.write(halfup);
+        digitalWrite(TESTOUT, 0);
+        realgeardir = NEUT;
       }
       else
       {
@@ -303,7 +376,51 @@ void loop()
       }
     }
 
-    if (millis() - statestart > DELAY)
+    if (SERVOMODE == POTS)
+    {
+      int gearpos = analogRead(GEARPOS);
+      int newpos = midpointpos;
+      if (realgeardir == NEUT)
+      {
+        newpos = halfuppos;
+      }
+      else if (realgeardir == UP)
+      {
+        newpos = upchangepos;
+      }
+      else if (realgeardir == DOWN)
+      {
+        newpos = downchangepos;
+      }
+
+      if (millis() - statestart > MAXLEVERTIME)
+      {
+        MODE = ERRORMODE;
+        CHANGESTATE = 0;
+        change = 0;
+        statestart = millis();
+      }
+      else
+      {
+        if (newpos > midpointpos)
+        {
+          if (gearpos >= (newpos - POTFLUFF))
+          {
+            CHANGESTATE++;
+            statestart = millis();
+          }
+        }
+        else if (newpos < midpointpos)
+        {
+          if (gearpos <= (newpos + POTFLUFF))
+          {
+            CHANGESTATE++;
+            statestart = millis();
+          }
+        }
+      }
+    }
+    else if (millis() - statestart > DELAY)
     {
       CHANGESTATE++;
       statestart = millis();
@@ -313,7 +430,51 @@ void loop()
   if (CHANGESTATE == 3)
   {
     gearchg.write(midpointms);
-    if (millis() - statestart > 200)
+    if (SERVOMODE == POTS)
+    {
+      int gearpos = analogRead(GEARPOS);
+      int oldpos = midpointpos;
+      if (realgeardir == NEUT)
+      {
+        oldpos = halfuppos;
+      }
+      else if (realgeardir == UP)
+      {
+        oldpos = upchangepos;
+      }
+      else if (realgeardir == DOWN)
+      {
+        oldpos = downchangepos;
+      }
+
+      if (millis() - statestart > MAXLEVERTIME)
+      {
+        MODE = ERRORMODE;
+        CHANGESTATE = 0;
+        change = 0;
+        statestart = millis();
+      }
+      else
+      {
+        if (midpointpos > oldpos)
+        {
+          if (gearpos >= (midpointpos - POTFLUFF))
+          {
+            CHANGESTATE++;
+            statestart = millis();
+          }
+        }
+        else if (midpointpos < oldpos)
+        {
+          if (gearpos <= (midpointpos + POTFLUFF))
+          {
+            CHANGESTATE++;
+            statestart = millis();
+          }
+        }
+      }
+    }
+    else if (millis() - statestart > 200)
     {
       CHANGESTATE++;
       statestart = millis();
@@ -326,6 +487,7 @@ void loop()
     {
       if ((gear == 0 && change == UP) || (gear == 1 && change == UP) || (gear == 2 && change == DOWN))
       {
+        digitalWrite(TESTOUT, 1);
         if (digitalRead(NEUTRAL) == 0)
         {
           MODE = ERRORMODE;
@@ -333,6 +495,7 @@ void loop()
       }
       else if (gear == 1 && change == NEUT)
       {
+        digitalWrite(TESTOUT, 0);
         if (digitalRead(NEUTRAL) == 1)
         {
           MODE = ERRORMODE;
@@ -351,6 +514,7 @@ void loop()
     if (cutup || forcedeclutched)
     {
       digitalWrite(ECUCUT, 0);
+      CHANGESTATE++;
     }
     else
     {
@@ -391,7 +555,36 @@ void loop()
       else
       {
         clutch.write(clutched);
-        if (millis() - statestart > CLUTCHFULLTIME)
+        if (SERVOMODE == POTS)
+        {
+          int clutchpotpos = analogRead(CLUTCHPOS);
+          if (millis() - statestart > MAXLEVERTIME)
+          {
+            MODE = ERRORMODE;
+            CHANGESTATE++;
+            statestart = millis();
+          }
+          else
+          {
+            if (clutchedpos > declutchedpos)
+            {
+              if (clutchpotpos >= (clutchedpos - POTFLUFF))
+              {
+                CHANGESTATE++;
+                statestart = millis();
+              }
+            }
+            else if (clutchedpos < declutchedpos)
+            {
+              if (clutchpotpos <= (clutchedpos + POTFLUFF))
+              {
+                CHANGESTATE++;
+                statestart = millis();
+              }
+            }
+          }
+        }
+        else if (millis() - statestart > CLUTCHFULLTIME)
         {
           CHANGESTATE++;
           statestart = millis();
@@ -423,7 +616,61 @@ void loop()
 
   if (millis() - lastshow > 600)
   {
-    Serial.println(gears[gear]);
+    if (NORMALMODE)
+    {
+      Serial.println(gears[gear]);
+    }
+    else
+    {
+      Serial.println("X");
+    }
+    if (Serial.read() == 't')
+    {
+      while (true)
+      {
+        int in = Serial.read();
+        if (in == 'u')
+        {
+          gearchg.write(halfup);
+          delay(MAXLEVERTIME);
+          Serial.println(analogRead(GEARPOS));
+        }
+        else if (in == '+')
+        {
+          gearchg.write(upchange);
+          delay(MAXLEVERTIME);
+          Serial.println(analogRead(GEARPOS));
+        }
+        else if (in == '-')
+        {
+          gearchg.write(downchange);
+          delay(MAXLEVERTIME);
+          Serial.println(analogRead(GEARPOS));
+        }
+        else if (in == 'm')
+        {
+          gearchg.write(midpointms);
+          delay(MAXLEVERTIME);
+          Serial.println(analogRead(GEARPOS));
+        }
+        else if (in == 'c')
+        {
+          clutch.write(clutched);
+          delay(MAXLEVERTIME);
+          Serial.println(analogRead(CLUTCHPOS));
+        }
+        else if (in == 'd')
+        {
+          clutch.write(declutched);
+          delay(MAXLEVERTIME);
+          Serial.println(analogRead(CLUTCHPOS));
+        }
+        else if (in == 'q')
+        {
+          break;
+        }
+      }
+    }
     lastshow = millis();
   }
 }

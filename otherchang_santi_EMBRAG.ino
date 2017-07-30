@@ -31,21 +31,21 @@ int cutup = 0;
 #define midpoint 90
 #define midpointms 1450
 #define midpointpos 0
-//#define halfup 65
-#define halfup 1330
+#define halfup 65
+//#define halfup 1330
 #define halfuppos 0
-//#define downchange 180
-#define downchange 2100
+#define downchange 180
+//#define downchange 2100
 #define downchangepos 0
-//#define upchange 0
-#define upchange 900
+#define upchange 0
+//#define upchange 900
 #define upchangepos 0
 
-//#define clutched 0
-#define clutched 900
+#define clutched 0
+//#define clutched 900
 #define clutchedpos 0
-//#define declutched 100
-#define declutched 2100
+#define declutched 100
+//#define declutched 2100
 #define declutchedpos 0
 
 #define MINPRESS 25

@@ -337,31 +337,11 @@ void loop()
       {
         gearchg.write(upchange);
         realgeardir = UP;
-        if (MODE == ERRORMODE)
-        {
-          digitalWrite(TESTOUT, 0);
-          if (digitalRead(NEUTRAL) == 0)
-          {
-            MODE = NORMALMODE;
-            gear = 1;
-          }
-          digitalWrite(TESTOUT, 1);
-        }
       }
       else if (change == DOWN)
       {
         gearchg.write(downchange);
         realgeardir = DOWN;
-        if (MODE == ERRORMODE)
-        {
-          digitalWrite(TESTOUT, 0);
-          if (digitalRead(NEUTRAL) == 0)
-          {
-            MODE = NORMALMODE;
-            gear = 2;
-          }
-          digitalWrite(TESTOUT, 1);
-        }
       }
       else if (change == NEUT)
       {
@@ -373,6 +353,19 @@ void loop()
       {
         change = 0;
         CHANGESTATE = 0;
+      }
+    }
+
+    if (digitalRead(NEUTRAL) == 0)
+    {
+      MODE = NORMALMODE;
+      if(realgeardir == UP || realgeardir == NEUT)
+      {
+        gear = 1;
+      }
+      else if(realgeardir == DOWN)
+      {
+        gear = 2;
       }
     }
 

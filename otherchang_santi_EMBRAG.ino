@@ -221,6 +221,10 @@ void loop()
         RELEASE = 1;
       }
     }
+    else if((digitalRead(UPCHANGE) == 0) && (digitalRead(DOWNCHANGE) == 0) )
+    {
+      started = 0;
+    }
   }
   if ((digitalRead(DOWNCHANGE)) == 1 && (digitalRead(UPCHANGE) == 1) && (digitalRead(NEUTBUT) == 1))
   {

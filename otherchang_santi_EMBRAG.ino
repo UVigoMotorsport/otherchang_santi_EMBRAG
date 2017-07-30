@@ -37,6 +37,7 @@ Servo gearchg;
 Servo clutch;
 
 int gear = 0;
+char gears[7] = {'N', '1', '2', '3', '4', '5', '6'};
 
 unsigned long lastmove = 0;
 int currmove = 0;
@@ -51,6 +52,7 @@ unsigned long laststart = 0;
 int started = 0;
 
 int RELEASE = 0;
+int ERRORFOUND = 0;
 
 void setup()
 {
@@ -88,7 +90,7 @@ void loop()
     clutch.write(clutched);
   }
 
-  if ((digitalRead(UPCHANGE) == 0) && (RELEASE == 0))
+  if ((digitalRead(UPCHANGE) == 0) && (RELEASE == 0) && ((gear < 6) || ERRORFOUND))
   {
     if (started == 0)
     {
@@ -99,8 +101,7 @@ void loop()
     {
       clutch.write(declutched);
       delay(100);
-      gearchg.attach(GEARCHANGE);
-      if (gear > 0)
+      if (gear > 0 || ERRORFOUND)
       {
         gearchg.write(upchange);
       }
@@ -108,17 +109,32 @@ void loop()
       {
         gearchg.write(downchange);
       }
-      delay(DELAY);
+      unsigned long changestart = millis();
+      while (millis() - changestart < DELAY)
+      {
+        if (digitalRead(NEUTRAL) == 0)
+        {
+          ERRORFOUND = 0;
+          gear = 1;
+        }
+      }
       gearchg.writeMicroseconds(midpointms);
       delay(150);
       clutch.write(clutched);
       delay(100);
-      gear++;
+      if (digitalRead(NEUTRAL) == 1 && !ERRORFOUND)
+      {
+        gear++;
+      }
+      else
+      {
+        ERRORFOUND = 1;
+      }
       started = 0;
       RELEASE = 1;
     }
   }
-  else if ((digitalRead(DOWNCHANGE) == 0) && (RELEASE == 0))
+  else if ((digitalRead(DOWNCHANGE) == 0) && (RELEASE == 0) && ((gear > 1) || ERRORFOUND))
   {
     if (started == 0)
     {
@@ -131,9 +147,16 @@ void loop()
       float clutchinc = ((float) clutched - (float) declutched) / 40.0;
       clutch.write(declutched);
       delay(100);
-      gearchg.attach(GEARCHANGE);
       gearchg.write(downchange);
-      delay(DELAY);
+      unsigned long changestart = millis();
+      while (millis() - changestart < DELAY)
+      {
+        if (digitalRead(NEUTRAL) == 0)
+        {
+          ERRORFOUND = 0;
+          gear = 2;
+        }
+      }
       gearchg.writeMicroseconds(midpointms);
       delay(150);
       int startdelay = 10;
@@ -165,12 +188,19 @@ void loop()
       }
       clutch.write(clutched);
       delay(10);
-      gear--;
+      if (digitalRead(NEUTRAL) == 1 && !ERRORFOUND)
+      {
+        gear--;
+      }
+      else
+      {
+        ERRORFOUND = 1;
+      }
       started = 0;
       RELEASE = 1;
     }
   }
-  else if ((digitalRead(NEUTBUT) == 0) && (RELEASE == 0))
+  else if ((digitalRead(NEUTBUT) == 0) && (RELEASE == 0) && ((gear == 1) || ERRORFOUND))
   {
     if (started == 0)
     {
@@ -181,16 +211,20 @@ void loop()
     {
       clutch.write(declutched);
       delay(100);
-      gearchg.attach(GEARCHANGE);
       gearchg.write(halfup);
       delay(DELAY);
       gearchg.writeMicroseconds(midpointms);
       delay(150);
       clutch.write(clutched);
       delay(100);
-      if (gear == 1)
+      if (digitalRead(NEUTRAL) == 0)
       {
-        gear--;
+        ERRORFOUND = 0;
+        gear = 0;
+      }
+      else
+      {
+        ERRORFOUND = 1;
       }
       started = 0;
       RELEASE = 1;
@@ -206,4 +240,5 @@ void loop()
     gearchg.writeMicroseconds(midpointms);
     delay(10);
   }
+  Serial.println(gears[gear]);
 }

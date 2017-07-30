@@ -240,5 +240,12 @@ void loop()
     gearchg.writeMicroseconds(midpointms);
     delay(10);
   }
-  Serial.println(gears[gear]);
+  if(!ERRORFOUND)
+  {
+    Serial.println(gears[gear]);
+  }
+  else
+  {
+    Serial.println("X");
+  }
 }
